@@ -5,3 +5,4 @@
 *results.csv*
 *.pt*
 *.npy*
+gru_ode_bayes.egg-info
