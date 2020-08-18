@@ -7,6 +7,7 @@ import gru_ode_bayes
 import gru_ode_bayes.data_utils as data_utils
 import time
 import tqdm
+import os
 from sklearn.metrics import roc_auc_score
 from gru_ode_bayes import Logger
 
@@ -46,7 +47,10 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
     params_dict["input_size"]=data_train.variable_num
     params_dict["cov_size"] = data_train.cov_dim
 
-    np.save(f"./../trained_models/{simulation_name}_params.npy",params_dict)
+    train_folder = "./../trained_models/"
+    if not os.path.exists(train_folder):
+        os.makedirs(train_folder)
+    np.save(train_folder + f"{simulation_name}_params.npy", params_dict)
 
     nnfwobj = gru_ode_bayes.NNFOwithBayesianJumps(input_size = params_dict["input_size"], hidden_size = params_dict["hidden_size"],
                                             p_hidden = params_dict["p_hidden"], prep_hidden = params_dict["prep_hidden"],
@@ -254,12 +258,12 @@ def test_evaluation(model, params_dict, class_criterion, device, dl_test):
 if __name__ =="__main__":
 
     simulation_name="small_climate"
-    device = torch.device("cuda")
+    device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
 
 
-    train_idx = np.load("../../gru_ode_bayes/datasets/Climate/folds/small_chunk_fold_idx_0/train_idx.npy",allow_pickle=True)
-    val_idx = np.load("../../gru_ode_bayes/datasets/Climate/folds/small_chunk_fold_idx_0/val_idx.npy",allow_pickle=True)
-    test_idx = np.load("../../gru_ode_bayes/datasets/Climate/folds/small_chunk_fold_idx_0/test_idx.npy",allow_pickle=True)
+    train_idx = np.load("../../gru_ode_bayes/datasets/Climate/datasets/small_chunk_fold_idx_0/train_idx.npy",allow_pickle=True)
+    val_idx = np.load("../../gru_ode_bayes/datasets/Climate/datasets/small_chunk_fold_idx_0/val_idx.npy",allow_pickle=True)
+    test_idx = np.load("../../gru_ode_bayes/datasets/Climate/datasets/small_chunk_fold_idx_0/test_idx.npy",allow_pickle=True)
 
     #Model parameters.
     params_dict=dict()
@@ -292,10 +296,12 @@ if __name__ =="__main__":
 
 
 
-    info, val_metric_prev, test_loglik, test_auc, test_mse = train_gruode(simulation_name = simulation_name,
-                        params_dict = params_dict,
-                        device = device,
-                        train_idx = train_idx,
-                        val_idx = val_idx,
-                        test_idx = test_idx,
-                        epoch_max=100)
+    info, val_metric_prev, test_loglik, test_auc, test_mse = train_gruode (
+                                                                            simulation_name = simulation_name,
+                                                                            params_dict = params_dict,
+                                                                            device = device,
+                                                                            train_idx = train_idx,
+                                                                            val_idx = val_idx,
+                                                                            test_idx = test_idx,
+                                                                            epoch_max=100
+                                                                        )

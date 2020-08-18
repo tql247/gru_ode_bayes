@@ -221,7 +221,6 @@ def add_jitter(df, jitter_time=1e-3):
     return df_jit
 
 
-
 def custom_collate_fn(batch):
     idx2batch = pd.Series(np.arange(len(batch)), index = [b["idx"] for b in batch])
 
