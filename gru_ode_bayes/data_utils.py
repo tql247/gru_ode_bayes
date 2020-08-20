@@ -48,15 +48,13 @@ class ODE_DatasetNumpy(Dataset):
 class ODE_Dataset(Dataset):
     """
     Dataset class for ODE type of data. With 2 values.
-    Can be fed with either a csv file containg the dataframe or directly with a panda dataframe.
+    One can only be fed with a panda dataframe.
     One can further provide samples idx that will be used (for training / validation split purposes.)
     """
-    def __init__(self, csv_file=None, cov_file=None, label_file=None, panda_df=None, cov_df=None, label_df=None, root_dir="./", t_mult=1.0, idx=None, jitter_time=0, validation = False, val_options = None):
+    def __init__(self, panda_df=None, cov_df=None, label_df=None, t_mult=1.0, idx=None, jitter_time=0, validation = False, val_options = None):
         """
         Args:
-            csv_file   CSV file to load the dataset from
             panda_df   alternatively use pandas df instead of CSV file
-            root_dir   directory of the CSV file
             t_mult     multiplier for time values (1.0 default)
             jitter_time  jitter size (0 means no jitter), to add randomly to Time.
                          Jitter is added before multiplying with t_mult
@@ -67,31 +65,14 @@ class ODE_Dataset(Dataset):
 
         """
         self.validation = validation
-
-        if panda_df is not None:
-            assert (csv_file is None), "Only one feeding option should be provided, not both"
-            self.df = panda_df
-            self.cov_df = cov_df
-            self.label_df  = label_df
-        else:
-            assert (csv_file is not None) , "At least one feeding option required !"
-            self.df = pd.read_csv(root_dir + "/" + csv_file)
-            assert self.df.columns[0]=="ID"
-            if label_file is None:
-                self.label_df = None
-            else:
-                self.label_df = pd.read_csv(root_dir + "/" + label_file)
-                assert self.label_df.columns[0]=="ID"
-                assert self.label_df.columns[1]=="label"
-            if cov_file is None :
-                self.cov_df = None
-            else:
-                self.cov_df = pd.read_csv(root_dir + "/" + cov_file)
-                assert self.cov_df.columns[0]=="ID"
+        self.df = panda_df
+        self.cov_df = cov_df
+        self.label_df  = label_df
 
         #Create Dummy covariates and labels if they are not fed.
+        num_unique = np.zeros(self.df["ID"].nunique())
+
         if self.cov_df is None:
-            num_unique = np.zeros(self.df["ID"].nunique())
             self.cov_df = pd.DataFrame({"ID":self.df["ID"].unique(),"Cov": num_unique})
         if self.label_df is None:
             num_unique = np.zeros(self.df["ID"].nunique())
