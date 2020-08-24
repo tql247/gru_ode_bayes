@@ -69,96 +69,94 @@ class ODE_Dataset(Dataset):
         self.cov_df = cov_df
         self.label_df  = label_df
 
-        #Create Dummy covariates and labels if they are not fed.
-        num_unique = np.zeros(self.df["ID"].nunique())
 
-        if self.cov_df is None:
-            self.cov_df = pd.DataFrame({"ID":self.df["ID"].unique(),"Cov": num_unique})
-        if self.label_df is None:
-            num_unique = np.zeros(self.df["ID"].nunique())
-            self.label_df = pd.DataFrame({"ID":self.df["ID"].unique(),"label": num_unique})
+        assert idx is not None, "idx of data must be fed!"
 
-        #If validation : consider only the data with a least one observation before T_val and one observation after:
-        self.store_last = False
-        if self.validation:
-            df_beforeIdx = self.df.loc[self.df["Time"]<=val_options["T_val"],"ID"].unique()
-            if val_options.get("T_val_from"): #Validation samples only after some time.
-                df_afterIdx  = self.df.loc[self.df["Time"]>=val_options["T_val_from"],"ID"].unique()
-                self.store_last = True #Dataset get will return a flag for the collate to compute the last sample before T_val
-            else:
-                df_afterIdx  = self.df.loc[self.df["Time"]>val_options["T_val"],"ID"].unique()
-            
-            valid_idx = np.intersect1d(df_beforeIdx,df_afterIdx)
-            self.df = self.df.loc[self.df["ID"].isin(valid_idx)]
-            self.label_df = self.label_df.loc[self.label_df["ID"].isin(valid_idx)]
-            self.cov_df   = self.cov_df.loc[self.cov_df["ID"].isin(valid_idx)]
+        # extract data value
+        self.df = self.df.loc[self.df["ID"].isin(idx)].copy()
 
-        if idx is not None:
-            self.df = self.df.loc[self.df["ID"].isin(idx)].copy()
-            map_dict= dict(zip(self.df["ID"].unique(),np.arange(self.df["ID"].nunique())))
-            self.df["ID"] = self.df["ID"].map(map_dict) # Reset the ID index.
+        # sort time, may not neccessary
+        self.df.sort_values("Time", inplace=True)
 
-            self.cov_df = self.cov_df.loc[self.cov_df["ID"].isin(idx)].copy()
-            self.cov_df["ID"] = self.cov_df["ID"].map(map_dict) # Reset the ID index.
-
-            self.label_df = self.label_df.loc[self.label_df["ID"].isin(idx)].copy()
-            self.label_df["ID"] = self.label_df["ID"].map(map_dict) # Reset the ID index.
-
-
-        assert self.cov_df.shape[0]==self.df["ID"].nunique()
-
-        self.variable_num = sum([c.startswith("Value") for c in self.df.columns]) #number of variables in the dataset
-        self.cov_dim = self.cov_df.shape[1]-1
-
-        self.cov_df = self.cov_df.astype(np.float32)
-        self.cov_df.set_index("ID", inplace=True)
-
-        self.label_df.set_index("ID",inplace=True)
-
-        self.df.Time    = self.df.Time * t_mult
-
-        #TO DO : make jitter compatible with several variables
-        if jitter_time != 0:
-            self.df = add_jitter(self.df, jitter_time=jitter_time)
-            self.df.Value_1 = self.df.Value_1.astype(np.float32)
-            self.df.Value_2 = self.df.Value_2.astype(np.float32)
-            self.df.Mask_1  = self.df.Mask_1.astype(np.float32)
-            self.df.Mask_2  = self.df.Mask_2.astype(np.float32)
-
-        else:
-            self.df = self.df.astype(np.float32)
-
+        # for validation and testing
         if self.validation:
             assert val_options is not None, "Validation set options should be fed"
             self.df_before = self.df.loc[self.df["Time"]<=val_options["T_val"]].copy()
-            if val_options.get("T_val_from"): #Validation samples only after some time.
-                self.df_after  = self.df.loc[self.df["Time"]>=val_options["T_val_from"]].sort_values("Time").copy()
-            else:
-                self.df_after  = self.df.loc[self.df["Time"]>val_options["T_val"]].sort_values("Time").copy()
-
-            if val_options.get("T_closest") is not None:
-                df_after_temp = self.df_after.copy()
-                df_after_temp["Time_from_target"] = (df_after_temp["Time"]-val_options["T_closest"]).abs()
-                df_after_temp.sort_values(by=["Time_from_target","Value_0"], inplace = True,ascending=True)
-                df_after_temp.drop_duplicates(subset=["ID"],keep="first",inplace = True)
-                self.df_after = df_after_temp.drop(columns = ["Time_from_target"])
-            else:
-                self.df_after  = self.df_after.groupby("ID").head(val_options["max_val_samples"]).copy()
+            self.df_after  = self.df.loc[self.df["Time"]>val_options["T_val"]].copy()
 
             self.df = self.df_before #We remove observations after T_val
 
-
-            self.df_after.ID = self.df_after.ID.astype(np.int)
-            self.df_after.sort_values("Time", inplace=True)
+            if len(self.df_after):
+                self.df_after  = self.df_after.groupby("ID").head(val_options["max_val_samples"]).copy()
+                self.df_after.ID = self.df_after.ID.astype(np.int)
+                map_dict= dict(
+                    zip(
+                        self.df_after["ID"].unique()\
+                        ,np.arange(self.df_after["ID"].nunique())
+                    )
+                )
+                self.df_after.ID = self.df_after["ID"].map(map_dict)
         else:
             self.df_after = None
+        
+
+        #Create Dummy covariates and labels
+        unique = self.df["ID"].unique()
+        num_unique = self.df["ID"].nunique()
+        vec_zero = np.zeros(num_unique)
+
+        if self.cov_df is None:
+            self.cov_df = pd.DataFrame({"ID": unique,"Cov": vec_zero})
+        else:
+            self.cov_df = self.cov_df.loc[self.cov_df["ID"].isin(idx)].copy()
 
 
-        self.length     = self.df["ID"].nunique()
-        self.df.ID      = self.df.ID.astype(np.int)
+        if self.label_df is None:
+            self.label_df = pd.DataFrame({"ID": unique,"label": vec_zero})
+        else:
+            self.label_df = self.label_df.loc[self.label_df["ID"].isin(idx)].copy()
+
+
+        assert self.cov_df.shape[0]==self.df["ID"].nunique(), "Must same size!"
+
+        # Reset the ID: x.0 .... x.0 y.0 .... y.0----> 0 0 0 0 0 .... 1 1 1 1 1.....
+        map_dict= dict(
+            zip(
+                self.df["ID"].unique()\
+                ,np.arange(self.df["ID"].nunique())
+            )
+        )
+
+        self.df["ID"] = self.df["ID"].map(map_dict)
+        self.cov_df["ID"] = self.cov_df["ID"].map(map_dict)
+        self.label_df["ID"] = self.label_df["ID"].map(map_dict)
+
+        # format data
+        self.df = self.df.astype(np.float32)
+        self.df.ID = self.df.ID.astype(np.int)
+        self.length = self.df["ID"].nunique()
+
+        # set some attributes
+        self.variable_num = sum([c.startswith("Value") for c in self.df.columns]) #number of variables (Columns which name start with Value) in the dataset
+        self.cov_dim = self.cov_df.shape[1] - 1
+        self.cov_df = self.cov_df.astype(np.float32)
+
+        # change time value
+        self.df.Time = self.df.Time * t_mult
+
+        #TO DO : make jitter compatible with several variables --- note of author
+        if jitter_time != 0:
+            self.df = add_jitter(self.df, jitter_time=jitter_time)
+
+
+        # set new default index = ID
         self.df.set_index("ID", inplace=True)
+        self.cov_df.set_index("ID", inplace=True)
+        self.label_df.set_index("ID",inplace=True)
 
-        self.df.sort_values("Time", inplace=True)
+        # print(self.df_after.loc[self.df_after["ID"]==1])
+        # print('------------------------------')
+        # print(self.df_after.sort_values("ID"))
 
     def __len__(self):
         return self.length
@@ -175,7 +173,8 @@ class ODE_Dataset(Dataset):
         else:
             val_samples = None
         ## returning also idx to allow empty samples
-        return {"idx":idx, "y": tag, "path": subset, "cov": covs , "val_samples":val_samples, "store_last":self.store_last}
+        return {"idx":idx, "y": tag, "path": subset, "cov": covs , "val_samples":val_samples, "store_last": False}
+
 
 def add_jitter(df, jitter_time=1e-3):
     """Modifies Double OU dataset, so that observations with both dimensions
@@ -201,8 +200,8 @@ def add_jitter(df, jitter_time=1e-3):
     df_jit.Time.clip_lower(0.0, inplace=True)
     return df_jit
 
-
 def custom_collate_fn(batch):
+
     idx2batch = pd.Series(np.arange(len(batch)), index = [b["idx"] for b in batch])
 
     pat_idx   = [b["idx"] for b in batch]
@@ -345,7 +344,6 @@ def seq_collate_fn(batch):
 
     return res
 
-
 def extract_from_path(t_vec, p_vec, eval_times, path_idx_eval):
     '''
     Takes :
@@ -363,7 +361,12 @@ def extract_from_path(t_vec, p_vec, eval_times, path_idx_eval):
     present_mask = np.isin(eval_times, t_vec)
     eval_times[~present_mask] = map_to_closest(eval_times[~present_mask],t_vec)
 
-    mapping = dict(zip(t_vec,np.arange(t_vec.shape[0])))
+    mapping = dict(
+        zip(
+            t_vec,
+            np.arange(t_vec.shape[0])
+        )
+    )
 
     time_idx = np.vectorize(mapping.get)(eval_times)
 
@@ -389,7 +392,6 @@ def compute_corr(X_true, X_hat, Mask):
     corr_denum2 = ((X_hat-means_hat).pow(2)*Mask).sum(0).sqrt()
     return corr_num/(corr_denum1*corr_denum2)
 
-
 def sort_array_on_other(x1,x2):
     """
     This function returns the permutation y needed to transform x2 in x1 s.t. x2[y]=x1
@@ -411,4 +413,3 @@ def tail_fun_gaussian(x,mu,logvar):
     Returns the probability that the given distribution is HIGHER than x.
     """
     return 0.5-0.5*special.erf((x-mu)/((0.5*logvar).exp()*np.sqrt(2)))
-

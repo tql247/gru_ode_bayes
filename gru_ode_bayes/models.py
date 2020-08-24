@@ -381,7 +381,7 @@ class NNFOwithBayesianJumps(torch.nn.Module):
             assert class_criterion is not None
 
         assert len(times) + 1 == len(time_ptr)
-        assert (len(times) == 0) or (times[-1] <= T)
+        assert (len(times) == 0) or (times[-1] <= T), f"sao em khong chay {time}"
 
         eval_times_total = torch.tensor([],dtype = torch.float64, device = h.device)
         eval_vals_total  = torch.tensor([],dtype = torch.float32, device = h.device)

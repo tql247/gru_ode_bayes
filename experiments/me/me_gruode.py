@@ -22,19 +22,16 @@ from gru_ode_bayes import Logger
 
 
 def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_idx, epoch_max=40):
-    csv_file_path = params_dict["csv_file_path"]
-    csv_file_cov = params_dict["csv_file_cov"]
-    csv_file_tags = params_dict["csv_file_tags"]
 
-    pd_df = pd.read_csv(csv_file_path) # pandas dataframe
+    csv_file_path   = params_dict["csv_file_path"]
+    pd_df           = pd.read_csv(csv_file_path)
+    N               = pd_df["ID"].nunique() 
 
-    N = pd_df["ID"].nunique() 
-    
+
     if params_dict["lambda"]==0:
         validation = True
         val_options = {"T_val": params_dict["T_val"], "max_val_samples": params_dict["max_val_samples"]}
         logger = Logger(f'./Logs/{simulation_name}')
-
     else:
         validation = False
         val_options = None
@@ -52,36 +49,75 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
                                         validation = validation,
                                         val_options = val_options)
 
-    dl   = DataLoader(dataset=data_train, collate_fn=data_utils.custom_collate_fn, shuffle=True, batch_size=20,num_workers=2)
-    dl_val = DataLoader(dataset=data_val, collate_fn=data_utils.custom_collate_fn, shuffle=True, batch_size=len(val_idx))
-    dl_test = DataLoader(dataset=data_test, collate_fn=data_utils.custom_collate_fn, shuffle=True, batch_size=len(test_idx))
 
 
-    params_dict["input_size"]=data_train.variable_num
-    params_dict["cov_size"] = data_train.cov_dim
+
+    dl      = DataLoader(dataset=data_train,
+                         collate_fn=data_utils.custom_collate_fn,
+                         shuffle=False,
+                         batch_size=20,
+                         num_workers=2)
+
+    dl_val  = DataLoader(dataset=data_val,
+                         collate_fn=data_utils.custom_collate_fn,
+                         batch_size=len(val_idx),
+                         shuffle=False)
+
+    dl_test = DataLoader(dataset=data_test,
+                         collate_fn=data_utils.custom_collate_fn,
+                         shuffle=False,
+                         batch_size=len(test_idx))
+
+
+    
+
+    # print()
+    # print()
+    # print()
+    # print(type(data_val))
+    # dataiter = iter(dl_val)
+    # print(dataiter.next())
+    # for b in dl_val:
+    #     print(b)
+    # # print(dataiter.__next__())
+    # return
+
+    params_dict["input_size"]   = data_train.variable_num
+    params_dict["cov_size"]     = data_train.cov_dim
+  
 
     train_folder = "./../trained_models/"
     if not os.path.exists(train_folder):
         os.makedirs(train_folder)
     np.save(train_folder + f"{simulation_name}_params.npy", params_dict)
 
-    nnfwobj = gru_ode_bayes.NNFOwithBayesianJumps(input_size = params_dict["input_size"], hidden_size = params_dict["hidden_size"],
-                                            p_hidden = params_dict["p_hidden"], prep_hidden = params_dict["prep_hidden"],
-                                            logvar = params_dict["logvar"], mixing = params_dict["mixing"],
-                                            classification_hidden=params_dict["classification_hidden"],
-                                            cov_size = params_dict["cov_size"], cov_hidden = params_dict["cov_hidden"],
-                                            dropout_rate = params_dict["dropout_rate"],full_gru_ode= params_dict["full_gru_ode"], impute = params_dict["impute"])
+    nnfwobj = gru_ode_bayes.NNFOwithBayesianJumps(input_size = params_dict["input_size"],
+                                                  hidden_size = params_dict["hidden_size"],
+                                                  p_hidden = params_dict["p_hidden"],
+                                                  prep_hidden = params_dict["prep_hidden"],
+                                                  logvar = params_dict["logvar"],
+                                                  mixing = params_dict["mixing"],
+                                                  classification_hidden=params_dict["classification_hidden"],
+                                                  cov_size = params_dict["cov_size"],
+                                                  cov_hidden = params_dict["cov_hidden"],
+                                                  dropout_rate = params_dict["dropout_rate"],
+                                                  full_gru_ode= params_dict["full_gru_ode"],
+                                                  impute = params_dict["impute"])
+
     nnfwobj.to(device)
 
     optimizer = torch.optim.Adam(nnfwobj.parameters(), lr=params_dict["lr"], weight_decay= params_dict["weight_decay"])
     class_criterion = torch.nn.BCEWithLogitsLoss(reduction='sum')
-    print("Start Training")
     val_metric_prev = -1000
+    print("Start Training")
+
+       
     for epoch in range(epoch_max):
-        nnfwobj.train()
+        nnfwobj.train() #????
         total_train_loss = 0
         auc_total_train  = 0
         tot_loglik_loss = 0
+
         for i, b in enumerate(tqdm.tqdm(dl)):
 
             optimizer.zero_grad()
@@ -109,15 +145,18 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
             
             total_loss.backward()
             optimizer.step()
-    
- 
         
+
+
+
         info = { 'training_loss' : total_train_loss.detach().cpu().numpy()/(i+1), 'AUC_training' : auc_total_train/(i+1), "loglik_loss" :tot_loglik_loss.detach().cpu().numpy()}
+        
         for tag, value in info.items():
             logger.scalar_summary(tag, value, epoch)
         print(f"NegLogLik Loss train : {tot_loglik_loss.detach().cpu().numpy()}")
 
         data_utils.adjust_learning_rate(optimizer,epoch,params_dict["lr"])
+
 
         with torch.no_grad():
             nnfwobj.eval()
@@ -127,7 +166,11 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
             mse_val  = 0
             corr_val = 0
             num_obs = 0
-            for i, b in enumerate(dl_val):
+
+
+
+            for i, b in enumerate(dl_val): #???? check dl_val
+
                 times    = b["times"]
                 time_ptr = b["time_ptr"]
                 X        = b["X"].to(device)
@@ -137,9 +180,11 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
                 labels   = b["y"].to(device)
                 batch_size = labels.size(0)
 
+
                 if b["X_val"] is not None:
                     X_val     = b["X_val"].to(device)
                     M_val     = b["M_val"].to(device)
+
                     times_val = b["times_val"]
                     times_idx = b["index_val"]
 
@@ -157,6 +202,9 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
 
                 if params_dict["lambda"]==0:
                     t_vec = np.around(t_vec,str(params_dict["delta_t"])[::-1].find('.')).astype(np.float32) #Round floating points error in the time vector.
+
+
+                    
                     p_val = data_utils.extract_from_path(t_vec,p_vec,times_val,times_idx)
                     m, v = torch.chunk(p_val,2,dim=1)
                     last_loss = (data_utils.log_lik_gaussian(X_val,m,v)*M_val).sum()
@@ -203,9 +251,9 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
         print(f"Validation AUC at epoch {epoch}: {auc_total_val/(i+1)}")
         print(f"Validation loss (loglik) at epoch {epoch}: {loss_val:.5f}. MSE : {mse_val:.5f}. Correlation : {np.nanmean(corr_val):.5f}. Num obs = {num_obs}")
 
-    print(f"Finished training GRU-ODE for Climate. Saved in ./../trained_models/{simulation_name}")
+    print(f"Finished training GRU-ODE for JORDÀ-SCHULARICK-TAYLOR MACROHISTORY DATABASE. Saved in ./../trained_models/{simulation_name}")
 
-    return(info, val_metric_prev, test_loglik, test_auc, test_mse)
+    # return(info, val_metric_prev, test_loglik, test_auc, test_mse)
 
 
 # In[ ]:
@@ -281,28 +329,38 @@ if __name__ =="__main__":
 
     simulation_name="me"
     device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
-
+    #Model parameters.
+    params_dict=dict()
 
     train_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/train_idx.npy",allow_pickle=True)
     val_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/val_idx.npy",allow_pickle=True)
     test_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/test_idx.npy",allow_pickle=True)
 
-    #Model parameters.
-    params_dict=dict()
-    params_dict["csv_file_path"] = "../../gru_ode_bayes/datasets/Climate/climate.csv" 
+    params_dict["csv_file_path"] = "../../gru_ode_bayes/datasets/me/me.csv"
+
+
+    # train_idx = np.load("../../gru_ode_bayes/datasets/Climate/datasets/climate/train_idx.npy",allow_pickle=True)
+    # val_idx = np.load("../../gru_ode_bayes/datasets/Climate/datasets/climate/val_idx.npy",allow_pickle=True)
+    # test_idx = np.load("../../gru_ode_bayes/datasets/Climate/datasets/climate/test_idx.npy",allow_pickle=True)
+    
+    # params_dict["csv_file_path"] = "../../gru_ode_bayes/datasets/Climate/climate.csv"
+
 
     params_dict["csv_file_tags"] = None
     params_dict["csv_file_cov"]  = None
 
+    params_dict["T"] = 2017 # Time max
+    params_dict["T_val"] = 2000 # Time that end observation
+    params_dict["max_val_samples"] = 1 # Numbers of observations per trajectory
     params_dict["hidden_size"] = 50
     params_dict["p_hidden"] = 25
     params_dict["prep_hidden"] = 10
     params_dict["logvar"] = True
     params_dict["mixing"] = 1e-4 #Weighting between KL loss and MSE loss.
     params_dict["delta_t"]=0.1
-    params_dict["T"]=200
-    params_dict["lambda"] = 0 #Weighting between classification and MSE loss.
 
+
+    params_dict["lambda"] = 0 #Weighting between classification and MSE loss.
     params_dict["classification_hidden"] = 2
     params_dict["cov_hidden"] = 50
     params_dict["weight_decay"] = 0.0001
@@ -312,20 +370,18 @@ if __name__ =="__main__":
     params_dict["no_cov"] = True
     params_dict["impute"] = False
     params_dict["verbose"] = 0 #from 0 to 3 (highest) visualize traning process
-    params_dict["T_val"] = 150
-    params_dict["max_val_samples"] = 3
 
 
 
-    info, val_metric_prev, test_loglik, test_auc, test_mse = train_gruode (
-                                                                            simulation_name = simulation_name,
-                                                                            params_dict = params_dict,
-                                                                            device = device,
-                                                                            train_idx = train_idx,
-                                                                            val_idx = val_idx,
-                                                                            test_idx = test_idx,
-                                                                            epoch_max=100
-                                                                        )
+    train_gruode (
+                    simulation_name = simulation_name,
+                    params_dict = params_dict,
+                    device = device,
+                    train_idx = train_idx,
+                    val_idx = val_idx,
+                    test_idx = test_idx,
+                    epoch_max=5
+                )
 
 
 # In[ ]:
