@@ -88,4 +88,5 @@ Menne et al., Long-Term Daily Climate Records from Stations Across the Contiguou
 
 **Note**
 Run step:
-climate_gruode.py at experiments/Climate/
+me.py at data_preproc/me
+me_gruode.py at experiments/me/

@@ -349,8 +349,8 @@ if __name__ =="__main__":
     params_dict["csv_file_tags"] = None
     params_dict["csv_file_cov"]  = None
 
-    params_dict["T"] = 2017 # Time max
-    params_dict["T_val"] = 2000 # Time that end observation
+    params_dict["T"] = 2017 # Time max, total time in dataset
+    params_dict["T_val"] = 2000 # Time that end observation for train, the remain use for valid and test
     params_dict["max_val_samples"] = 1 # Numbers of observations per trajectory
     params_dict["hidden_size"] = 50
     params_dict["p_hidden"] = 25
@@ -380,7 +380,7 @@ if __name__ =="__main__":
                     train_idx = train_idx,
                     val_idx = val_idx,
                     test_idx = test_idx,
-                    epoch_max=5
+                    epoch_max=20
                 )
 
 
