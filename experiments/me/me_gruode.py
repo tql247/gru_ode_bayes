@@ -332,11 +332,18 @@ if __name__ =="__main__":
     #Model parameters.
     params_dict=dict()
 
-    train_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/train_idx.npy",allow_pickle=True)
-    val_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/val_idx.npy",allow_pickle=True)
-    test_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/test_idx.npy",allow_pickle=True)
 
-    params_dict["csv_file_path"] = "../../gru_ode_bayes/datasets/me/me.csv"
+    train_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/current_0/train_idx.npy",allow_pickle=True)
+    val_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/current_0/val_idx.npy",allow_pickle=True)
+    test_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/current_0/test_idx.npy",allow_pickle=True)
+
+    params_dict["csv_file_path"] = "../../gru_ode_bayes/datasets/me/current_preprocessed.csv"
+
+    # train_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/train_idx.npy",allow_pickle=True)
+    # val_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/val_idx.npy",allow_pickle=True)
+    # test_idx = np.load("../../gru_ode_bayes/datasets/me/datasets/me_0/test_idx.npy",allow_pickle=True)
+
+    # params_dict["csv_file_path"] = "../../gru_ode_bayes/datasets/me/me.csv"
 
 
     # train_idx = np.load("../../gru_ode_bayes/datasets/Climate/datasets/climate/train_idx.npy",allow_pickle=True)
@@ -349,8 +356,8 @@ if __name__ =="__main__":
     params_dict["csv_file_tags"] = None
     params_dict["csv_file_cov"]  = None
 
-    params_dict["T"] = 2017 # Time max, total time in dataset
-    params_dict["T_val"] = 2000 # Time that end observation for train, the remain use for valid and test
+    params_dict["T"] = 739 # Time max, total time in dataset
+    params_dict["T_val"] = 700 # Time that end observation for train, the remain use for valid and test
     params_dict["max_val_samples"] = 1 # Numbers of observations per trajectory
     params_dict["hidden_size"] = 50
     params_dict["p_hidden"] = 25
@@ -380,7 +387,7 @@ if __name__ =="__main__":
                     train_idx = train_idx,
                     val_idx = val_idx,
                     test_idx = test_idx,
-                    epoch_max=20
+                    epoch_max=1
                 )
 
 
