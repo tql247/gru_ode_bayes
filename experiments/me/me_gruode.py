@@ -253,7 +253,7 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
 
     print(f"Finished training GRU-ODE for JORDÀ-SCHULARICK-TAYLOR MACROHISTORY DATABASE. Saved in ./../trained_models/{simulation_name}")
 
-    # return(info, val_metric_prev, test_loglik, test_auc, test_mse)
+    return(info, val_metric_prev, test_loglik, test_auc, test_mse)
 
 
 # In[ ]:
