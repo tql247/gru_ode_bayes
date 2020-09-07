@@ -18,9 +18,9 @@ from sklearn.metrics import roc_auc_score
 from gru_ode_bayes import Logger
 
 # from sklearn.metrics import mean_squared_error as MSE
-# from math import sqrt
-# from torch.nn import NLLLoss
-
+from math import sqrt
+from torch.nn import NLLLoss
+nllloss = NLLLoss()
 
 # In[ ]:
 
@@ -53,7 +53,6 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
                                         idx=test_idx,
                                         validation = validation,
                                         val_options = val_options)
-
 
 
 
@@ -110,7 +109,8 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
         nnfwobj.train()
         total_train_loss = 0
         auc_total_train  = 0
-        # rmse_total_train = 0
+        rmse_total_train = 0
+        NLLLoss_total_train = 0
         tot_loglik_loss = 0
 
         for i, b in enumerate(tqdm.tqdm(dl)):
@@ -131,8 +131,13 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
             total_loss = (loss + params_dict["lambda"]*class_criterion(class_pred, labels))/batch_size
             total_train_loss += total_loss
             tot_loglik_loss +=mse_loss
-            # rmse_train = sqrt(mse_loss)
-            # rmse_total_train += rmse_train
+
+            rmse_train = sqrt(mse_loss)
+            rmse_total_train += rmse_train
+
+            temp = labels.view(1,labels.__len__())[0].long()
+            NLLLoss_train = nllloss(class_pred, temp)
+            NLLLoss_total_train += NLLLoss_train
 
             try:
                 auc_total_train += roc_auc_score(labels.detach().cpu(),torch.sigmoid(class_pred).detach().cpu())
@@ -146,11 +151,11 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
         
 
 
-
         info = { 'training_loss' : total_train_loss.detach().cpu().numpy()/(i+1),
                  'AUC_training' : auc_total_train/(i+1),
                  'loglik_loss' : tot_loglik_loss.detach().cpu().numpy(),
-                #  'RMSE_traning': rmse_total_train/(i+1) 
+                 'RMSE_traning': rmse_total_train/(i+1),
+                 'NLLLoss_training' : NLLLoss_total_train.detach().cpu().numpy()/(i+1)
                 }
         
         for tag, value in info.items():
@@ -164,7 +169,8 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
             nnfwobj.eval()
             total_loss_val = 0
             auc_total_val = 0
-            # rmse_total_val = 0
+            rmse_total_val = 0
+            NLLLoss_total_val = 0
             loss_val = 0
             mse_val  = 0
             corr_val = 0
@@ -224,15 +230,23 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
 
                 total_loss_val += total_loss.cpu().detach().numpy()
                 auc_total_val += auc_val
-                # rmse_val = sqrt(mse_val)
-                # rmse_total_val += rmse_val
+                rmse_val = sqrt(mse_val)
+                rmse_total_val += rmse_val
+
+                
+                temp = labels.view(1,labels.__len__())[0].long()
+                NLLLoss_val = nllloss(class_pred.cpu(), temp.cpu())
+                NLLLoss_total_val += NLLLoss_val
+
+
 
             loss_val /= num_obs
             mse_val /=  num_obs
             info = { 'validation_loss' : total_loss_val/(i+1), 'AUC_validation' : auc_total_val/(i+1),
                      'loglik_loss' : loss_val, 'validation_mse' : mse_val, 'correlation_mean' : np.nanmean(corr_val),
                      'correlation_max': np.nanmax(corr_val), 'correlation_min': np.nanmin(corr_val),
-                    #  'RMSE validation' : rmse_total_val(i + 1)
+                     'RMSE validation' : rmse_total_val/(i + 1),
+                     'NLLLoss validation' : NLLLoss_total_val/(i+1)
                     }
             for tag, value in info.items():
                 logger.scalar_summary(tag, value, epoch)
@@ -247,11 +261,12 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
                 print("Saving Model")
                 torch.save(nnfwobj.state_dict(),f"./../trained_models/{simulation_name}_MAX.pt")
                 val_metric_prev = val_metric
-                test_loglik, test_auc, test_mse = test_evaluation(nnfwobj, params_dict, class_criterion, device, dl_test)
+                test_loglik, test_auc, test_mse, NLLLoss_total_test = test_evaluation(nnfwobj, params_dict, class_criterion, device, dl_test)
                 print(f"Test loglik loss at epoch {epoch} : {test_loglik}")
                 print(f"Test AUC loss at epoch {epoch} : {test_auc}")
                 print(f"Test MSE loss at epoch{epoch} : {test_mse}")
-                # print(f"Test RMSE loss at epoch{epoch} : {sqrt(test_rmse)}")
+                print(f"Test RMSE loss at epoch{epoch} : {sqrt(test_rmse)}")
+                print(f"Test NLLLoss loss at epoch{epoch} : {NLLLoss_total_test}")
             else:
                 if epoch % 10:
                     torch.save(nnfwobj.state_dict(),f"./../trained_models/{simulation_name}.pt")
@@ -259,11 +274,12 @@ def train_gruode(simulation_name,params_dict,device, train_idx, val_idx, test_id
         print(f"Total validation loss at epoch {epoch}: {total_loss_val/(i+1)}")
         print(f"Validation AUC at epoch {epoch}: {auc_total_val/(i+1)}")
         print(f"Validation loss (loglik) at epoch {epoch}: {loss_val:.5f}. MSE : {mse_val:.5f}. Correlation : {np.nanmean(corr_val):.5f}. Num obs = {num_obs}")
-        # print(f"Validation RMSE at epoch {epoch}: {rmse_total_val/(i + 1)}")
+        print(f"Validation RMSE at epoch {epoch}: {rmse_total_val/(i + 1)}")
+        print(f"Validation NLLLoss at epoch {epoch}: {NLLLoss_total_val/(i + 1)}")
 
     print(f"Finished training GRU-ODE for JORDÀ-SCHULARICK-TAYLOR MACROHISTORY DATABASE. Saved in ./../trained_models/{simulation_name}")
 
-    return(info, val_metric_prev, test_loglik, test_auc, test_mse )#rmse_total_val
+    # return(info, val_metric_prev, test_loglik, test_auc, test_mse)#rmse_total_val
 
 
 # In[ ]:
@@ -274,6 +290,7 @@ def test_evaluation(model, params_dict, class_criterion, device, dl_test):
         model.eval()
         total_loss_test = 0
         auc_total_test = 0
+        NLLLoss_total_test = 0
         loss_test = 0
         mse_test  = 0
         corr_test = 0
@@ -324,11 +341,18 @@ def test_evaluation(model, params_dict, class_criterion, device, dl_test):
             total_loss_test += total_loss.cpu().detach().numpy()
             auc_total_test += auc_test
 
+
+            temp = labels.view(1,labels.__len__())[0].long()
+            NLLLoss_test = nllloss(class_pred.cpu(), temp.cpu())
+            NLLLoss_total_test += NLLLoss_test
+
+
         loss_test /= num_obs
         mse_test /=  num_obs
         auc_total_test /= (i+1)
+        NLLLoss_total_test /= (i+1)
 
-        return(loss_test, auc_total_test, mse_test)
+        return(loss_test, auc_total_test, mse_test, NLLLoss_total_test)
 
 
 # In[4]:
@@ -397,7 +421,7 @@ if __name__ =="__main__":
                     train_idx = train_idx,
                     val_idx = val_idx,
                     test_idx = test_idx,
-                    epoch_max=1
+                    epoch_max=100
                 )
 
 
